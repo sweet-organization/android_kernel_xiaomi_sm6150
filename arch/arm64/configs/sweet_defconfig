@@ -5359,6 +5359,16 @@ CONFIG_HAVE_ARM_SMCCC=y
 # CONFIG_MESON_SM is not set
 
 #
+# KernelSU
+#
+CONFIG_KSU=y
+# CONFIG_KSU_DEBUG is not set
+# CONFIG_KSU_ALLOWLIST_WORKAROUND is not set
+# CONFIG_KSU_CMDLINE is not set
+# CONFIG_KSU_MANUAL_HOOK is not set
+CONFIG_KSU_TRACEPOINT_HOOK=y
+
+#
 # Tegra firmware driver
 #
 # CONFIG_ACPI is not set
