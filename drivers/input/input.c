@@ -29,6 +29,10 @@
 #include <linux/rcupdate.h>
 #include "input-compat.h"
 
+#if defined(CONFIG_KSU) && defined(CONFIG_KSU_TRACEPOINT_HOOK)
+	#include <../../drivers/kernelsu/ksu_trace.h>
+#endif
+
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_DESCRIPTION("Input core");
 MODULE_LICENSE("GPL");
@@ -436,10 +440,24 @@ static void input_handle_event(struct input_dev *dev,
  * to 'seed' initial state of a switch or initial position of absolute
  * axis, etc.
  */
+#ifdef CONFIG_KSU
+extern bool ksu_input_hook __read_mostly;
+extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
+#endif
+
 void input_event(struct input_dev *dev,
 		 unsigned int type, unsigned int code, int value)
 {
 	unsigned long flags;
+
+#ifdef CONFIG_KSU
+	#if defined(CONFIG_KSU_TRACEPOINT_HOOK)
+		trace_ksu_trace_input_hook(&type, &code, &value);
+	#elif defined(CONFIG_KSU_MANUAL_HOOK)
+		if (unlikely(ksu_input_hook))
+			ksu_handle_input_handle_event(&type, &code, &value);
+	#endif
+#endif
 
 	if (is_event_supported(type, dev->evbit, EV_MAX)) {
 
