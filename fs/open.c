@@ -32,6 +32,10 @@
 #include <linux/dnotify.h>
 #include <linux/compat.h>
 
+#if defined(CONFIG_KSU) && defined(CONFIG_KSU_TRACEPOINT_HOOK)
+	#include <../drivers/kernelsu/ksu_trace.h>
+#endif
+
 #include "internal.h"
 
 int do_truncate2(struct vfsmount *mnt, struct dentry *dentry, loff_t length,
@@ -354,7 +358,7 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
 	return error;
 }
 
-#ifdef CONFIG_KSU
+#if defined(CONFIG_KSU) && defined(CONFIG_KSU_MANUAL_HOOK)
 extern __attribute__((hot, always_inline)) int ksu_handle_faccessat(int *dfd,
 		const char __user **filename_user, int *mode, int *flags);
 #endif
@@ -373,10 +377,14 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 	struct vfsmount *mnt;
 	int res;
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
-
-#ifdef CONFIG_KSU
-	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
-#endif
+	
+	#ifdef CONFIG_KSU
+		#if defined(CONFIG_KSU_TRACEPOINT_HOOK)
+			trace_ksu_trace_faccessat_hook(&dfd, &filename, &mode, NULL);
+    		#elif defined(CONFIG_KSU_MANUAL_HOOK)
+    			ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+    		#endif
+	#endif
 
 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
 		return -EINVAL;

@@ -21,6 +21,10 @@
 #include <linux/susfs_def.h>
 #endif
 
+#if defined(CONFIG_KSU) && defined(CONFIG_KSU_TRACEPOINT_HOOK)
+	#include <../drivers/kernelsu/ksu_trace.h>
+#endif
+
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 
@@ -371,7 +375,7 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 	return cp_new_stat(&stat, statbuf);
 }
 
-#ifdef CONFIG_KSU
+#if defined(CONFIG_KSU) && defined(CONFIG_KSU_MANUAL_HOOK)
 extern __attribute__((hot, always_inline)) int ksu_handle_stat(int *dfd,
 			const char __user **filename_user, int *flags);
 #endif
@@ -384,7 +388,11 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
 	int error;
 
 #ifdef CONFIG_KSU
-	ksu_handle_stat(&dfd, &filename, &flag);
+	#if defined(CONFIG_KSU_TRACEPOINT_HOOK)
+		trace_ksu_trace_stat_hook(&dfd, &filename, &flag);
+	#elif defined(CONFIG_KSU_MANUAL_HOOK)
+		ksu_handle_stat(&dfd, &filename, &flag);
+	#endif
 #endif
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
@@ -530,8 +538,12 @@ SYSCALL_DEFINE4(fstatat64, int, dfd, const char __user *, filename,
 	struct kstat stat;
 	int error;
 
-#ifdef CONFIG_KSU
-	ksu_handle_stat(&dfd, &filename, &flag); /* 32-bit su support */
+#ifdef CONFIG_KSU /* 32-bit su support */
+	#if defined(CONFIG_KSU_TRACEPOINT_HOOK)
+		trace_ksu_trace_stat_hook(&dfd, &filename, &flag);
+	#elif defined(CONFIG_KSU_MANUAL_HOOK)
+		ksu_handle_stat(&dfd, &filename, &flag);
+	#endif
 #endif
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
