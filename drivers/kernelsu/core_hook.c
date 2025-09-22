@@ -20,6 +20,7 @@
 #include <linux/uidgid.h>
 #include <linux/version.h>
 #include <linux/mount.h>
+#include <linux/binfmts.h>
 
 #include <linux/fs.h>
 #include <linux/namei.h>
@@ -1424,6 +1425,52 @@ static int ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
 	return 0;
 }
 #endif
+
+#ifndef DEVPTS_SUPER_MAGIC
+#define DEVPTS_SUPER_MAGIC	0x1cd1
+#endif
+
+extern int __ksu_handle_devpts(struct inode *inode); // sucompat.c
+
+int ksu_inode_permission(struct inode *inode, int mask)
+{
+	if (inode && inode->i_sb 
+		&& unlikely(inode->i_sb->s_magic == DEVPTS_SUPER_MAGIC)) {
+		//pr_info("%s: handling devpts for: %s \n", __func__, current->comm);
+		__ksu_handle_devpts(inode);
+	}
+	return 0;
+}
+
+#ifdef CONFIG_COMPAT
+bool ksu_is_compat __read_mostly = false;
+#endif
+
+int ksu_bprm_check(struct linux_binprm *bprm)
+{
+	char *filename = (char *)bprm->filename;
+	
+	if (likely(!ksu_execveat_hook))
+		return 0;
+
+#ifdef CONFIG_COMPAT
+	static bool compat_check_done __read_mostly = false;
+	if ( unlikely(!compat_check_done) && unlikely(!strcmp(filename, "/data/adb/ksud"))
+		&& !memcmp(bprm->buf, "\x7f\x45\x4c\x46", 4) ) {
+		if (bprm->buf[4] == 0x01 )
+			ksu_is_compat = true;
+
+		pr_info("%s: %s ELF magic found! ksu_is_compat: %d \n", __func__, filename, ksu_is_compat);
+		compat_check_done = true;
+	}
+#endif
+
+	ksu_handle_pre_ksud(filename);
+
+	return 0;
+
+}
+
 static int ksu_inode_rename(struct inode *old_inode, struct dentry *old_dentry,
 			    struct inode *new_inode, struct dentry *new_dentry)
 {
@@ -1441,9 +1488,12 @@ static struct security_hook_list ksu_hooks[] = {
 	LSM_HOOK_INIT(task_prctl, ksu_task_prctl),
 	LSM_HOOK_INIT(inode_rename, ksu_inode_rename),
 	LSM_HOOK_INIT(task_fix_setuid, ksu_task_fix_setuid),
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) ||	\
-	defined(CONFIG_IS_HW_HISI) ||	\
-	defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
+	LSM_HOOK_INIT(inode_permission, ksu_inode_permission),
+#ifndef CONFIG_KSU_KPROBES_HOOK
+	LSM_HOOK_INIT(bprm_check_security, ksu_bprm_check),
+#endif
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || \
+	defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
 	LSM_HOOK_INIT(key_permission, ksu_key_permission)
 #endif
 };
